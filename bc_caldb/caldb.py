@@ -1,10 +1,13 @@
 from dataclasses import dataclass
+from os import PathLike
+from pathlib import Path
 from typing import Any, Optional
 
+from astropy.io import fits
 import numpy as np
 import numpy.typing as npt
 
-from bc_caldb.constants import CURRENT_CALDB_VER
+from bc_caldb.constants import CURRENT_CALDB_VER, DEFAULT_MASK_SEED
 
 
 @dataclass
@@ -191,7 +194,163 @@ class Teldef:
 @dataclass
 class CodedMask:
     # TODO: Fill in coded mask details
-    pass
+    #   - Do we want separate types of masks?
+    #   - Fill in remaining header keywords
+
+    CCLS0001 = "BCF"
+    CCNM0001 = "CODED_MASK"
+    CDTP0001 = "DATA"
+    CVSD0001 = "2026-02-11"
+    CVST0001 = "00:00:00"
+    CDES0001 = "BlackCAT Coded mask (aperture) pattern"
+
+    # CTYPE1 = 
+    # CRPIX1 = 
+    # CRVAL1 = 
+    CUNIT1 = "m"
+    CDELT1 = 320e-6
+    # CTYPE2 = 
+    # CRPIX2 = 
+    # CRVAL2 = 
+    CUNIT2 = "m"
+    CDELT2 = 320e-6
+
+    # MASKSATX = 
+    # MASKSATY = 
+    MASKSATZ = 0.1540
+    # MASKOFFX = 
+    # MASKOFFY = 
+    # MASKOFFZ = 
+
+    # MASKPSI0 = 
+    # MASKPSI1 = 
+    # MASKPSI2 = =
+
+    MASKCELX = 295e-6
+    MASKCELY = 295e-6
+    # MASKCELZ = 
+
+    # DETSATX = 
+    # DETSATY = 
+    DETSATZ = 0
+    # DETOFFX = 
+    # DETOFFY = 
+    # DETOFFZ = 
+
+    DETCELX = 40e-6 / 3
+    DETCELY = 40e-6 / 3
+    # DETCELZ = 
+    DETSIZEX = 40e-6 / 3
+    DETSIZEY = 40e-6 / 3
+    # DETSIZEZ = 
+
+    mask_array: Optional[npt.NDArray | PathLike | str] = None
+
+    # The following aren't used externally
+    _MASK_CELL_COUNT = np.array([555, 249])
+    _XRIBX = np.array([138.5, 277.5, 416.5])
+
+    def frame_pattern(self) -> npt.NDArray[np.bool]:
+        pattern = np.zeros(shape=self._MASK_CELL_COUNT, dtype=bool)
+
+        for xlow, ylow, xblocksize, yblocksize, nsteps, xstep, ystep in self.ribs():
+            for _ in range(nsteps):
+                pattern[xlow:xlow+xblocksize, ylow:ylow+yblocksize] = True
+                xlow += xstep
+                ylow += ystep
+
+        ymesh, xmesh = np.meshgrid(
+            np.arange(self._MASK_CELL_COUNT[1]), np.arange(self._MASK_CELL_COUNT[0])
+        )
+
+        # Manually applying the fillets.
+        # _l means centerline rounded down (i.e., lower)
+        for yrib_l in [-4, self._MASK_CELL_COUNT[1] // 2, self._MASK_CELL_COUNT[1] + 3]:
+            for xrib_l in [-4, self._MASK_CELL_COUNT[0] + 3] + list(self._XRIBX.astype(int)):
+                pattern[max(xrib_l - 7, 0):xrib_l+5, max(yrib_l - 7, 0):yrib_l+5] = True
+                pattern[max(xrib_l - 4, 0):xrib_l+8, max(yrib_l - 4, 0):yrib_l+8] = True
+                pattern[max(xrib_l - 5, 0):xrib_l+6, max(yrib_l - 5, 0):yrib_l+6] = True
+
+        screw_gus_widths = [19, 15, 13, 11, 9]
+        for xrib_l in self._XRIBX.astype(int):
+            for y, y_sign in [(0, 1), (self._MASK_CELL_COUNT[1] - 1, -1)]:
+                for dy, w in enumerate(screw_gus_widths):
+                    pattern[xrib_l - w//2:xrib_l + w//2 + 1, y + dy*y_sign] = True
+
+        return pattern
+
+    def mask_pattern(self) -> npt.NDArray[np.bool]:
+        nx, ny = self._MASK_CELL_COUNT
+
+        if self.mask_array is not None:
+            if isinstance(self.mask_array, np.ndarray):
+                maskpat_f = self.mask_array
+            elif isinstance(self.mask_array, PathLike | str):
+                maskpat_f = fits.getdata(Path(self.mask_array))
+            else:
+                raise TypeError(
+                    "Mask array must be a numpy array or path to a fits "
+                    f"file, not {type(self.mask_array)}."
+                )
+
+            pattern = (
+                np.array(maskpat_f, dtype=bool)
+                .ravel()[-nx*ny :]
+                .reshape(self._MASK_CELL_COUNT)
+                .copy()
+            )   # Copy to release open mask file
+        else:
+            pattern = np.array(
+                self.shift_register_sequence(seqlength=nx*ny, seed=DEFAULT_MASK_SEED),
+                dtype=bool,
+            ).reshape(self._MASK_CELL_COUNT)
+
+            frame_pattern = self.frame_pattern()
+
+            pattern = pattern & ~frame_pattern
+
+        return pattern
+
+    def ribs(self) -> npt.NDArray[np.integer[Any]]:
+        yriby = self._MASK_CELL_COUNT[1] / 2
+        ribhw = 3.5
+
+        ribs = np.array(
+            [
+                (self._XRIBX[0] - ribhw, 0, 2 * ribhw, self._MASK_CELL_COUNT[1], 1, 0, 0),
+                (self._XRIBX[1] - ribhw, 0, 2 * ribhw, self._MASK_CELL_COUNT[1], 1, 0, 0),
+                (self._XRIBX[2] - ribhw, 0, 2 * ribhw, self._MASK_CELL_COUNT[1], 1, 0, 0),
+                (0, yriby - ribhw, self._MASK_CELL_COUNT[0], 2 * ribhw, 1, 0, 0),
+            ], dtype=int,
+        )
+
+        return ribs
+
+    @staticmethod
+    def shift_register_sequence(seqlength: int, seed: int) -> npt.NDArray[np.bool]:
+        nbits = int(np.ceil(np.log2(seqlength + 1)))
+
+        # From Horowitz and Hill pg. 657
+        taplist = [
+            -1, -1, -1, 2, 3, 3, 5, 6, -1, 5, 7, 9, -1, -1, -1, 14, -1, 14, 11, -1, 17, 19, 21, 18, -1, 22, -1, -1, 25, 27, -1, 28
+        ]
+        if taplist[nbits] == -1:
+            raise RuntimeError(f"No single-tap maximal LFSR with {nbits} bits: specify multiple taps")
+        taps = [nbits, taplist[nbits]]
+
+        sequence = np.zeros(seqlength, dtype=bool)
+
+        for idx, seedbit in enumerate(reversed(f"{seed:b}")):
+            if idx >= nbits:
+                break
+
+            sequence[idx] = seedbit == "1"
+
+        for idx in range(nbits, seqlength):
+            for tap in taps:
+                sequence[idx] ^= sequence[idx - tap]   # xor starting with False
+
+        return sequence
 
 
 @dataclass
@@ -214,3 +373,10 @@ class BadPix:
 class GainCorr:
     # TODO: Fill in gain correction details
     pass
+
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    mask_obj = CodedMask()
+    plt.imshow(mask_obj.mask_pattern(), origin="lower")
+    plt.show()
