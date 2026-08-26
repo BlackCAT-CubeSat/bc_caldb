@@ -44,7 +44,7 @@ class Teldef:
     DET_XCOL = "DETX"
     DET_YCOL = "DETY"
     DET_UNIT = "m"
-    detx_min: float 
+    detx_min: float
     detx_max: float
     dety_min: float
     dety_max: float
@@ -97,10 +97,13 @@ class Teldef:
             self.det_ids,
         )
 
-        det_envelope = np.array([
-            [np.min(detx), np.min(dety)],
-            [np.max(detx), np.max(dety)],
-        ], dtype=np.float64)
+        det_envelope = np.array(
+            [
+                [np.min(detx), np.min(dety)],
+                [np.max(detx), np.max(dety)],
+            ],
+            dtype=np.float64,
+        )
 
         return det_envelope
 
@@ -118,14 +121,19 @@ class Teldef:
         )
 
     def fpa_pixel_counts(
-        self, use_subpixel: bool = False,
+        self,
+        use_subpixel: bool = False,
     ) -> npt.NDArray[np.uint16]:
         x_width_m, y_width_m = np.diff(self.det_envelope(), axis=0)
 
-        fpa_pixel_counts = np.round(np.array([
-            x_width_m / self.x_pix_size_m(use_subpixel),
-            y_width_m / self.y_pix_size_m(use_subpixel),
-        ])).astype(np.uint16)
+        fpa_pixel_counts = np.round(
+            np.array(
+                [
+                    x_width_m / self.x_pix_size_m(use_subpixel),
+                    y_width_m / self.y_pix_size_m(use_subpixel),
+                ]
+            )
+        ).astype(np.uint16)
 
         return fpa_pixel_counts
 
@@ -138,8 +146,8 @@ class Teldef:
         detx_low, dety_low = self.det_envelope()[0]
 
         return (
-            pixxs*self.x_pix_size_m(use_subpixel) + detx_low,
-            pixys*self.y_pix_size_m(use_subpixel) + dety_low,
+            pixxs * self.x_pix_size_m(use_subpixel) + detx_low,
+            pixys * self.y_pix_size_m(use_subpixel) + dety_low,
         )
 
     def rawxy_to_detxy(
@@ -148,12 +156,43 @@ class Teldef:
         rawy_arr: npt.NDArray[np.integer[Any]],
         det_id_arr: npt.NDArray[np.integer[Any]],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        convert_array = np.array([
-            (self.det0_x0, self.det0_y0, self.det0_dx_dcol, self.det0_dy_dcol, self.det0_dx_drow, self.det0_dy_drow),
-            (self.det1_x0, self.det1_y0, self.det1_dx_dcol, self.det1_dy_dcol, self.det1_dx_drow, self.det1_dy_drow),
-            (self.det2_x0, self.det2_y0, self.det2_dx_dcol, self.det2_dy_dcol, self.det2_dx_drow, self.det2_dy_drow),
-            (self.det3_x0, self.det3_y0, self.det3_dx_dcol, self.det3_dy_dcol, self.det3_dx_drow, self.det3_dy_drow),
-        ], dtype=self._CONVERT_DTYPE)
+        convert_array = np.array(
+            [
+                (
+                    self.det0_x0,
+                    self.det0_y0,
+                    self.det0_dx_dcol,
+                    self.det0_dy_dcol,
+                    self.det0_dx_drow,
+                    self.det0_dy_drow,
+                ),
+                (
+                    self.det1_x0,
+                    self.det1_y0,
+                    self.det1_dx_dcol,
+                    self.det1_dy_dcol,
+                    self.det1_dx_drow,
+                    self.det1_dy_drow,
+                ),
+                (
+                    self.det2_x0,
+                    self.det2_y0,
+                    self.det2_dx_dcol,
+                    self.det2_dy_dcol,
+                    self.det2_dx_drow,
+                    self.det2_dy_drow,
+                ),
+                (
+                    self.det3_x0,
+                    self.det3_y0,
+                    self.det3_dx_dcol,
+                    self.det3_dy_dcol,
+                    self.det3_dx_drow,
+                    self.det3_dy_drow,
+                ),
+            ],
+            dtype=self._CONVERT_DTYPE,
+        )
 
         detx_arr = np.zeros(len(rawx_arr), dtype=np.float64)
         dety_arr = np.zeros(len(rawx_arr), dtype=np.float64)
@@ -162,22 +201,22 @@ class Teldef:
             det_id_mask = det_id_arr == det_id
             detx_arr[det_id_mask] = (
                 convert_array[det_id]["x0"]
-                + rawx_arr[det_id_mask]*convert_array[det_id]["dx_dcol"]
-                + rawy_arr[det_id_mask]*convert_array[det_id]["dx_drow"]
+                + rawx_arr[det_id_mask] * convert_array[det_id]["dx_dcol"]
+                + rawy_arr[det_id_mask] * convert_array[det_id]["dx_drow"]
             )
             dety_arr[det_id_mask] = (
                 convert_array[det_id]["y0"]
-                + rawx_arr[det_id_mask]*convert_array[det_id]["dy_dcol"]
-                + rawy_arr[det_id_mask]*convert_array[det_id]["dy_drow"]
+                + rawx_arr[det_id_mask] * convert_array[det_id]["dy_dcol"]
+                + rawy_arr[det_id_mask] * convert_array[det_id]["dy_drow"]
             )
 
         return detx_arr, dety_arr
 
     def x_pix_size_m(self, use_subpixel: bool = False) -> float:
-        return self.RAW_XSCL if use_subpixel else self.RAW_XSCL*3
+        return self.RAW_XSCL if use_subpixel else self.RAW_XSCL * 3
 
     def y_pix_size_m(self, use_subpixel: bool = False) -> float:
-        return self.RAW_YSCL if use_subpixel else self.RAW_YSCL*3
+        return self.RAW_YSCL if use_subpixel else self.RAW_YSCL * 3
 
     @classmethod
     def calculate_raw_det_conversion_values(
@@ -220,7 +259,10 @@ class Teldef:
         raw_det_conversion_arr = cls.calculate_raw_det_conversion_values(caldb_ver)
 
         teldef_obj = cls(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             *raw_det_conversion_arr[0],
             *raw_det_conversion_arr[1],
             *raw_det_conversion_arr[2],
@@ -235,6 +277,7 @@ class Teldef:
 
         return teldef_obj
 
+
 @dataclass
 class CodedMask:
     # TODO: Fill in coded mask details
@@ -248,45 +291,45 @@ class CodedMask:
     CVST0001 = "00:00:00"
     CDES0001 = "BlackCAT Coded mask (aperture) pattern"
 
-    # CTYPE1 = 
-    # CRPIX1 = 
-    # CRVAL1 = 
+    # CTYPE1 =
+    # CRPIX1 =
+    # CRVAL1 =
     CUNIT1 = "m"
     CDELT1 = 320e-6
-    # CTYPE2 = 
-    # CRPIX2 = 
-    # CRVAL2 = 
+    # CTYPE2 =
+    # CRPIX2 =
+    # CRVAL2 =
     CUNIT2 = "m"
     CDELT2 = 320e-6
 
-    # MASKSATX = 
-    # MASKSATY = 
+    # MASKSATX =
+    # MASKSATY =
     MASKSATZ = 0.1540
-    # MASKOFFX = 
-    # MASKOFFY = 
-    # MASKOFFZ = 
+    # MASKOFFX =
+    # MASKOFFY =
+    # MASKOFFZ =
 
-    # MASKPSI0 = 
-    # MASKPSI1 = 
+    # MASKPSI0 =
+    # MASKPSI1 =
     # MASKPSI2 = =
 
     MASKCELX = 295e-6
     MASKCELY = 295e-6
-    # MASKCELZ = 
+    # MASKCELZ =
 
-    # DETSATX = 
-    # DETSATY = 
+    # DETSATX =
+    # DETSATY =
     DETSATZ = 0
-    # DETOFFX = 
-    # DETOFFY = 
-    # DETOFFZ = 
+    # DETOFFX =
+    # DETOFFY =
+    # DETOFFZ =
 
     DETCELX = 40e-6 / 3
     DETCELY = 40e-6 / 3
-    # DETCELZ = 
+    # DETCELZ =
     DETSIZEX = 40e-6 / 3
     DETSIZEY = 40e-6 / 3
-    # DETSIZEZ = 
+    # DETSIZEZ =
 
     mask_array: Optional[npt.NDArray | PathLike | str] = None
 
@@ -299,27 +342,38 @@ class CodedMask:
 
         for xlow, ylow, xblocksize, yblocksize, nsteps, xstep, ystep in self.ribs():
             for _ in range(nsteps):
-                pattern[xlow:xlow+xblocksize, ylow:ylow+yblocksize] = True
+                pattern[xlow : xlow + xblocksize, ylow : ylow + yblocksize] = True
                 xlow += xstep
                 ylow += ystep
 
-        ymesh, xmesh = np.meshgrid(
-            np.arange(self._MASK_CELL_COUNT[1]), np.arange(self._MASK_CELL_COUNT[0])
-        )
+        # TODO: Use the mesh somehow?
+        # ymesh, xmesh = np.meshgrid(
+        #     np.arange(self._MASK_CELL_COUNT[1]), np.arange(self._MASK_CELL_COUNT[0])
+        # )
 
         # Manually applying the fillets.
         # _l means centerline rounded down (i.e., lower)
         for yrib_l in [-4, self._MASK_CELL_COUNT[1] // 2, self._MASK_CELL_COUNT[1] + 3]:
-            for xrib_l in [-4, self._MASK_CELL_COUNT[0] + 3] + list(self._XRIBX.astype(int)):
-                pattern[max(xrib_l - 7, 0):xrib_l+5, max(yrib_l - 7, 0):yrib_l+5] = True
-                pattern[max(xrib_l - 4, 0):xrib_l+8, max(yrib_l - 4, 0):yrib_l+8] = True
-                pattern[max(xrib_l - 5, 0):xrib_l+6, max(yrib_l - 5, 0):yrib_l+6] = True
+            for xrib_l in [-4, self._MASK_CELL_COUNT[0] + 3] + list(
+                self._XRIBX.astype(int)
+            ):
+                pattern[
+                    max(xrib_l - 7, 0) : xrib_l + 5, max(yrib_l - 7, 0) : yrib_l + 5
+                ] = True
+                pattern[
+                    max(xrib_l - 4, 0) : xrib_l + 8, max(yrib_l - 4, 0) : yrib_l + 8
+                ] = True
+                pattern[
+                    max(xrib_l - 5, 0) : xrib_l + 6, max(yrib_l - 5, 0) : yrib_l + 6
+                ] = True
 
         screw_gus_widths = [19, 15, 13, 11, 9]
         for xrib_l in self._XRIBX.astype(int):
             for y, y_sign in [(0, 1), (self._MASK_CELL_COUNT[1] - 1, -1)]:
                 for dy, w in enumerate(screw_gus_widths):
-                    pattern[xrib_l - w//2:xrib_l + w//2 + 1, y + dy*y_sign] = True
+                    pattern[xrib_l - w // 2 : xrib_l + w // 2 + 1, y + dy * y_sign] = (
+                        True
+                    )
 
         return pattern
 
@@ -339,13 +393,13 @@ class CodedMask:
 
             pattern = (
                 np.array(maskpat_f, dtype=bool)
-                .ravel()[-nx*ny :]
+                .ravel()[-nx * ny :]
                 .reshape(self._MASK_CELL_COUNT)
                 .copy()
-            )   # Copy to release open mask file
+            )  # Copy to release open mask file
         else:
             pattern = np.array(
-                self.shift_register_sequence(seqlength=nx*ny, seed=DEFAULT_MASK_SEED),
+                self.shift_register_sequence(seqlength=nx * ny, seed=DEFAULT_MASK_SEED),
                 dtype=bool,
             ).reshape(self._MASK_CELL_COUNT)
 
@@ -361,11 +415,36 @@ class CodedMask:
 
         ribs = np.array(
             [
-                (self._XRIBX[0] - ribhw, 0, 2 * ribhw, self._MASK_CELL_COUNT[1], 1, 0, 0),
-                (self._XRIBX[1] - ribhw, 0, 2 * ribhw, self._MASK_CELL_COUNT[1], 1, 0, 0),
-                (self._XRIBX[2] - ribhw, 0, 2 * ribhw, self._MASK_CELL_COUNT[1], 1, 0, 0),
+                (
+                    self._XRIBX[0] - ribhw,
+                    0,
+                    2 * ribhw,
+                    self._MASK_CELL_COUNT[1],
+                    1,
+                    0,
+                    0,
+                ),
+                (
+                    self._XRIBX[1] - ribhw,
+                    0,
+                    2 * ribhw,
+                    self._MASK_CELL_COUNT[1],
+                    1,
+                    0,
+                    0,
+                ),
+                (
+                    self._XRIBX[2] - ribhw,
+                    0,
+                    2 * ribhw,
+                    self._MASK_CELL_COUNT[1],
+                    1,
+                    0,
+                    0,
+                ),
                 (0, yriby - ribhw, self._MASK_CELL_COUNT[0], 2 * ribhw, 1, 0, 0),
-            ], dtype=int,
+            ],
+            dtype=int,
         )
 
         return ribs
@@ -376,10 +455,43 @@ class CodedMask:
 
         # From Horowitz and Hill pg. 657
         taplist = [
-            -1, -1, -1, 2, 3, 3, 5, 6, -1, 5, 7, 9, -1, -1, -1, 14, -1, 14, 11, -1, 17, 19, 21, 18, -1, 22, -1, -1, 25, 27, -1, 28
+            -1,
+            -1,
+            -1,
+            2,
+            3,
+            3,
+            5,
+            6,
+            -1,
+            5,
+            7,
+            9,
+            -1,
+            -1,
+            -1,
+            14,
+            -1,
+            14,
+            11,
+            -1,
+            17,
+            19,
+            21,
+            18,
+            -1,
+            22,
+            -1,
+            -1,
+            25,
+            27,
+            -1,
+            28,
         ]
         if taplist[nbits] == -1:
-            raise RuntimeError(f"No single-tap maximal LFSR with {nbits} bits: specify multiple taps")
+            raise RuntimeError(
+                f"No single-tap maximal LFSR with {nbits} bits: specify multiple taps"
+            )
         taps = [nbits, taplist[nbits]]
 
         sequence = np.zeros(seqlength, dtype=bool)
@@ -392,7 +504,7 @@ class CodedMask:
 
         for idx in range(nbits, seqlength):
             for tap in taps:
-                sequence[idx] ^= sequence[idx - tap]   # xor starting with False
+                sequence[idx] ^= sequence[idx - tap]  # xor starting with False
 
         return sequence
 
@@ -408,10 +520,12 @@ class Response:
     # TODO: Fill in response details
     pass
 
+
 @dataclass
 class BadPix:
     # TODO: Fill in bad pixel mask details
     pass
+
 
 @dataclass
 class GainCorr:
@@ -421,6 +535,7 @@ class GainCorr:
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
+
     mask_obj = CodedMask()
     plt.imshow(mask_obj.mask_pattern(), origin="lower")
     plt.show()
