@@ -104,6 +104,38 @@ class Teldef:
 
         return det_envelope
 
+    def detxy_to_pixxy(
+        self,
+        detxs: npt.NDArray[np.floating[Any]],
+        detys: npt.NDArray[np.floating[Any]],
+        use_subpixel: bool = False,
+    ) -> npt.NDArray[np.floating[Any]]:
+        detx_low, dety_low = self.det_envelope()[0]
+
+        x_pix_size_m = self.RAW_XSCL if use_subpixel else self.RAW_XSCL*3
+        pixxs = (detxs - detx_low) * (1 / x_pix_size_m)
+
+        y_pix_size_m = self.RAW_YSCL if use_subpixel else self.RAW_YSCL*3
+        pixys = (detys - dety_low) * (1 / y_pix_size_m)
+
+        return pixxs, pixys
+
+    def pixxy_to_detxy(
+        self,
+        pixxs: npt.NDArray[np.floating[Any]],
+        pixys: npt.NDArray[np.floating[Any]],
+        use_subpixel: bool = False,
+    ) -> npt.NDArray[np.floating[Any]]:
+        detx_low, dety_low = self.det_envelope()[0]
+
+        x_pix_size_m = self.RAW_XSCL if use_subpixel else self.RAW_XSCL*3
+        detxs = pixxs*x_pix_size_m + detx_low
+
+        y_pix_size_m = self.RAW_YSCL if use_subpixel else self.RAW_YSCL*3
+        detys = pixys*y_pix_size_m + dety_low
+
+        return detxs, detys
+
     def rawxy_to_detxy(
         self,
         rawx_arr: npt.NDArray[np.integer[Any]],
