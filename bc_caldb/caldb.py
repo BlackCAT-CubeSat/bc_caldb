@@ -112,13 +112,22 @@ class Teldef:
     ) -> npt.NDArray[np.floating[Any]]:
         detx_low, dety_low = self.det_envelope()[0]
 
-        x_pix_size_m = self.RAW_XSCL if use_subpixel else self.RAW_XSCL*3
-        pixxs = (detxs - detx_low) * (1 / x_pix_size_m)
+        return (
+            (detxs - detx_low) * (1 / self.x_pix_size_m(use_subpixel)),
+            (detys - dety_low) * (1 / self.y_pix_size_m(use_subpixel)),
+        )
 
-        y_pix_size_m = self.RAW_YSCL if use_subpixel else self.RAW_YSCL*3
-        pixys = (detys - dety_low) * (1 / y_pix_size_m)
+    def fpa_pixel_counts(
+        self, use_subpixel: bool = False,
+    ) -> npt.NDArray[np.uint16]:
+        x_width_m, y_width_m = np.diff(self.det_envelope(), axis=0)
 
-        return pixxs, pixys
+        fpa_pixel_counts = np.round(np.array([
+            x_width_m / self.x_pix_size_m(use_subpixel),
+            y_width_m / self.y_pix_size_m(use_subpixel),
+        ])).astype(np.uint16)
+
+        return fpa_pixel_counts
 
     def pixxy_to_detxy(
         self,
@@ -128,13 +137,10 @@ class Teldef:
     ) -> npt.NDArray[np.floating[Any]]:
         detx_low, dety_low = self.det_envelope()[0]
 
-        x_pix_size_m = self.RAW_XSCL if use_subpixel else self.RAW_XSCL*3
-        detxs = pixxs*x_pix_size_m + detx_low
-
-        y_pix_size_m = self.RAW_YSCL if use_subpixel else self.RAW_YSCL*3
-        detys = pixys*y_pix_size_m + dety_low
-
-        return detxs, detys
+        return (
+            pixxs*self.x_pix_size_m(use_subpixel) + detx_low,
+            pixys*self.y_pix_size_m(use_subpixel) + dety_low,
+        )
 
     def rawxy_to_detxy(
         self,
@@ -166,6 +172,12 @@ class Teldef:
             )
 
         return detx_arr, dety_arr
+
+    def x_pix_size_m(self, use_subpixel: bool = False) -> float:
+        return self.RAW_XSCL if use_subpixel else self.RAW_XSCL*3
+
+    def y_pix_size_m(self, use_subpixel: bool = False) -> float:
+        return self.RAW_YSCL if use_subpixel else self.RAW_YSCL*3
 
     @classmethod
     def calculate_raw_det_conversion_values(
