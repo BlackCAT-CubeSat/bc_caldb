@@ -124,7 +124,8 @@ class Teldef:
         self,
         use_subpixel: bool = False,
     ) -> npt.NDArray[np.uint16]:
-        x_width_m, y_width_m = np.diff(self.det_envelope(), axis=0)
+
+        x_width_m, y_width_m = np.diff(self.det_envelope(), axis=0)[0]
 
         fpa_pixel_counts = np.round(
             np.array(
