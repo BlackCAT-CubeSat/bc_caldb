@@ -74,7 +74,7 @@ class Teldef:
     det3_dx_drow: float
     det3_dy_drow: float
 
-    FOCALLEN = (0.1540, "Telescope focal length (m)")
+    FOCALLEN = 0.1540
 
     # The following aren't used externally
     _CONVERT_DTYPE = [
