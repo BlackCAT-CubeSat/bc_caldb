@@ -91,7 +91,7 @@ class Teldef:
         return np.arange(self.NUM_DETS, dtype=np.uint8)
 
     def det_envelope(self) -> npt.NDArray[np.float64]:
-        detx, dety = self.rawxy_to_detxy(
+        detxs, detys = self.rawxy_to_detxy(
             np.array([0, 0, 0, 0], dtype=np.uint8),
             np.array([0, 0, 0, 0], dtype=np.uint8),
             self.det_ids,
@@ -99,8 +99,8 @@ class Teldef:
 
         det_envelope = np.array(
             [
-                [np.min(detx), np.min(dety)],
-                [np.max(detx), np.max(dety)],
+                [np.min(detxs), np.min(detys)],
+                [np.max(detxs), np.max(detys)],
             ],
             dtype=np.float64,
         )
@@ -343,10 +343,10 @@ class CodedMask:
     mask_array: Optional[npt.NDArray | PathLike | str] = None
 
     # The following aren't used externally
-    _MASK_CELL_COUNT = np.array([555, 249])
-    _XRIBX = np.array([138.5, 277.5, 416.5])
+    _MASK_CELL_COUNT = np.array([555, 249], np.uint16)
+    _XRIBX = np.array([138.5, 277.5, 416.5], np.float32)
 
-    def frame_pattern(self) -> npt.NDArray[np.bool]:
+    def frame_pattern(self) -> npt.NDArray[np.bool_]:
         pattern = np.zeros(shape=self._MASK_CELL_COUNT, dtype=bool)
 
         for xlow, ylow, xblocksize, yblocksize, nsteps, xstep, ystep in self.ribs():
@@ -384,9 +384,9 @@ class CodedMask:
                         True
                     )
 
-        return pattern
+        return pattern.astype(bool)
 
-    def mask_pattern(self) -> npt.NDArray[np.bool]:
+    def mask_pattern(self) -> npt.NDArray[np.bool_]:
         nx, ny = self._MASK_CELL_COUNT
 
         if self.mask_array is not None:
@@ -478,7 +478,7 @@ class CodedMask:
         return np.vstack((-mask_size / 2, mask_size / 2), dtype=np.float64)
 
     @staticmethod
-    def shift_register_sequence(seqlength: int, seed: int) -> npt.NDArray[np.bool]:
+    def shift_register_sequence(seqlength: int, seed: int) -> npt.NDArray[np.bool_]:
         nbits = int(np.ceil(np.log2(seqlength + 1)))
 
         # From Horowitz and Hill pg. 657
@@ -559,11 +559,3 @@ class BadPix:
 class GainCorr:
     # TODO: Fill in gain correction details
     pass
-
-
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    mask_obj = CodedMask()
-    plt.imshow(mask_obj.mask_pattern(), origin="lower")
-    plt.show()
