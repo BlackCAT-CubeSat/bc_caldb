@@ -343,7 +343,7 @@ class CodedMask:
     mask_array: Optional[npt.NDArray | PathLike | str] = None
 
     # The following aren't used externally
-    _MASK_CELL_COUNT = np.array([555, 249], np.uint16)
+    _MASK_CELL_COUNT = np.array([555, 249], np.int64)
     _XRIBX = np.array([138.5, 277.5, 416.5], np.float32)
 
     def frame_pattern(self) -> npt.NDArray[np.bool_]:
