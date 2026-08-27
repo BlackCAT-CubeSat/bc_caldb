@@ -1,6 +1,7 @@
 """CALDB Definitions and scripts for BlackCAT"""
 
-from bc_caldb.caldb import *
+from bc_caldb.caldb_generators import *
+from bc_caldb.caldb_readers import *
 from bc_caldb.constants import *
 
 
