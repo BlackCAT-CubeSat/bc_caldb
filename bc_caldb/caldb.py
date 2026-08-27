@@ -109,10 +109,13 @@ class Teldef:
 
     def detxy_to_pixxy(
         self,
-        detxs: npt.NDArray[np.floating[Any]],
-        detys: npt.NDArray[np.floating[Any]],
+        detxs: npt.NDArray[np.floating[Any] | np.integer[Any]],
+        detys: npt.NDArray[np.floating[Any] | np.integer[Any]],
         use_subpixel: bool = False,
-    ) -> npt.NDArray[np.floating[Any]]:
+    ) -> tuple[
+        npt.NDArray[np.floating[Any] | np.integer[Any]],
+        npt.NDArray[np.floating[Any] | np.integer[Any]],
+    ]:
         detx_low, dety_low = self.det_envelope()[0]
 
         return (
@@ -140,10 +143,13 @@ class Teldef:
 
     def pixxy_to_detxy(
         self,
-        pixxs: npt.NDArray[np.floating[Any]],
-        pixys: npt.NDArray[np.floating[Any]],
+        pixxs: npt.NDArray[np.floating[Any] | np.integer[Any]],
+        pixys: npt.NDArray[np.floating[Any] | np.integer[Any]],
         use_subpixel: bool = False,
-    ) -> npt.NDArray[np.floating[Any]]:
+    ) -> tuple[
+        npt.NDArray[np.floating[Any] | np.integer[Any]],
+        npt.NDArray[np.floating[Any] | np.integer[Any]],
+    ]:
         detx_low, dety_low = self.det_envelope()[0]
 
         return (
@@ -153,9 +159,9 @@ class Teldef:
 
     def rawxy_to_detxy(
         self,
-        rawx_arr: npt.NDArray[np.integer[Any]],
-        rawy_arr: npt.NDArray[np.integer[Any]],
-        det_id_arr: npt.NDArray[np.integer[Any]],
+        rawx_arr: npt.NDArray[np.floating[Any] | np.integer[Any]],
+        rawy_arr: npt.NDArray[np.floating[Any] | np.integer[Any]],
+        det_id_arr: npt.NDArray[np.floating[Any] | np.integer[Any]],
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         convert_array = np.array(
             [
@@ -222,7 +228,7 @@ class Teldef:
     @classmethod
     def calculate_raw_det_conversion_values(
         cls, caldb_ver: Optional[str] = None
-    ) -> npt.NDArray[np.float32]:
+    ) -> npt.NDArray[np.void]:
         nominal_gap = 1788e-6
         p_full = cls.RAW_XSCL * 3
         p = cls.RAW_XSCL
@@ -243,10 +249,12 @@ class Teldef:
                 pass
             case "20260614":
                 raw_det_conversion_arr["x0"] += np.array(
-                    [32.9e-6, 3.1e-6, -232.2e-6, 195.9e-6]
+                    [32.9e-6, 3.1e-6, -232.2e-6, 195.9e-6],
+                    dtype=np.float32,
                 )
                 raw_det_conversion_arr["y0"] += np.array(
-                    [189.0e-6, -167.7e-6, 96.2e-6, -117.6e-6]
+                    [189.0e-6, -167.7e-6, 96.2e-6, -117.6e-6],
+                    dtype=np.float32,
                 )
             case str():
                 raise ValueError(f"{caldb_ver} is not a valid CalDB version.")
@@ -410,7 +418,21 @@ class CodedMask:
 
         return pattern
 
-    def ribs(self) -> npt.NDArray[np.integer[Any]]:
+    def maskxy_to_cellxy(
+        self,
+        maskxs: npt.NDArray[np.floating[Any] | np.integer[Any]],
+        maskys: npt.NDArray[np.floating[Any] | np.integer[Any]],
+    ) -> tuple[
+        npt.NDArray[np.floating[Any] | np.integer[Any]],
+        npt.NDArray[np.floating[Any] | np.integer[Any]],
+    ]:
+        maskx_low, masky_low = self.mask_envelope()[0]
+        return (
+            (maskxs - maskx_low) * (1 / self.CDELT1),
+            (maskys - masky_low) * (1 / self.CDELT2),
+        )
+
+    def ribs(self) -> npt.NDArray[np.uint16]:
         yriby = self._MASK_CELL_COUNT[1] / 2
         ribhw = 3.5
 
@@ -445,10 +467,15 @@ class CodedMask:
                 ),
                 (0, yriby - ribhw, self._MASK_CELL_COUNT[0], 2 * ribhw, 1, 0, 0),
             ],
-            dtype=int,
+            dtype=np.uint16,
         )
 
         return ribs
+
+    @classmethod
+    def mask_envelope(cls) -> npt.NDArray[np.float64]:
+        mask_size = np.array([cls.CDELT1, cls.CDELT2]) * cls._MASK_CELL_COUNT
+        return np.vstack((-mask_size / 2, mask_size / 2), dtype=np.float64)
 
     @staticmethod
     def shift_register_sequence(seqlength: int, seed: int) -> npt.NDArray[np.bool]:
