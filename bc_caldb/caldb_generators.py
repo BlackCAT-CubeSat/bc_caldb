@@ -2,8 +2,11 @@ from abc import ABC, abstractmethod
 from datetime import datetime, UTC
 from enum import StrEnum
 from functools import cached_property
+from os import PathLike
+from pathlib import Path
 from typing import Any, Optional
 
+from astropy.io import fits
 import numpy as np
 import numpy.typing as npt
 
@@ -11,43 +14,18 @@ from bc_caldb.constants import CURRENT_CALDB_VER, DEFAULT_MASK_SEED
 
 
 MANDATORY_KEYWORDS = {
-    "TELESCOP": ("BLACKCAT", "Telescope (mission) name"),
-    "INSTRUME": ("BLACKCAT", "Instrument Name"),
     "DATE": (
         datetime.now(tz=UTC).strftime(f"%Y-%m-%dT%H:%M:%S.%f")[:-3],
         "Creation Date",
     ),
-    # Per-File
-    # - CHECKSUM
-    # - DATASUM
+    "TELESCOP": ("BLACKCAT", "Telescope (mission) name"),
+    "INSTRUME": ("BLACKCAT", "Instrument Name"),
 }
 MANDATORY_TABLE_KEYWORDS = {
     "ORIGIN": ("PENNSTATE", "Source of FITS file"),
     "CREATOR": ("BC_CALDB", "Software that created FITS file"),
-    # Per-File / Per-header
-    # - EXTNAME
-    # - CONTENT
-    # - FILENAME
-    # - VERSION
-    # - CCLSxxxx
-    # - CDTPxxxx
-    # - CCNMxxxx
-    # - CDESxxxx
-    # - CVSDxxxx
-    # - CVSTxxxx
 }
-# Situationally required
-# - CBDnxxxx
-# - CSYSNAME
-# - TDIMnnn
-# - HDUCLASS
-# - HDUDOC
-# - HDUCLASn
-# - HDUVERSn
-# - TIMESYS
-# - MJDREFI
-# - MJDREFF
-# - CLOCKAPP
+SEP = "-" * 70
 
 
 class CalDBVersions(StrEnum):
@@ -56,6 +34,9 @@ class CalDBVersions(StrEnum):
 
 
 class GenerateCalDB(ABC):
+    CONTENT_DESCRIPTION: str
+    DATA_TYPE: str
+
     def __init__(self, caldb_version: Optional[str] = CURRENT_CALDB_VER):
         if not isinstance(caldb_version, str | None):
             raise TypeError(
@@ -76,16 +57,56 @@ class GenerateCalDB(ABC):
 
         return generation_keywords
 
+    @cached_property
+    def outname(self) -> str:
+        return f"bl{self.DATA_TYPE}{self._caldb_version}v{self.version:03}.fits.gz"
+
+    @cached_property
+    def version(self) -> int:
+        # NOTE: Currently no support for versions other than 001.
+        return 1
+
     @abstractmethod
     def generate_caldb_values(self) -> None:
-        self._commented_dicts: list[tuple[dict[str, tuple[Any, str]], str]]
+        self._commented_dicts: list[tuple[dict[str, tuple[Any, str]], list[str]]]
 
-    def generate_fits_file(self) -> None:
-        # TODO: Implement this generation
-        pass
+    def generate_fits_file(
+        self,
+        outdir: Optional[PathLike | str] = None,
+    ) -> fits.PrimaryHDU:
+        header = fits.Header(
+            cards=[
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in MANDATORY_KEYWORDS.items()
+                ],
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in MANDATORY_TABLE_KEYWORDS.items()
+                ],
+                ("VERSION", self.version, "Extension version number"),
+                ("FILENAME", self.outname, "File name"),
+                ("CONTENT", self.CONTENT_DESCRIPTION, "File content"),
+            ]
+        )
+        for section_dict, section_comments in self._commented_dicts:
+            for key, (value, comment) in section_dict.items():
+                header.set(key, value, comment)
+
+            for comment in section_comments:
+                header.add_comment(comment, before=next(iter(section_dict)))
+
+        primary_hdu = fits.PrimaryHDU(data=None, header=header)
+
+        if outdir is not None:
+            primary_hdu.writeto(Path(outdir) / self.outname, checksum=True)
+
+        return primary_hdu
 
 
 class GenerateTeldef(GenerateCalDB):
+    CONTENT_DESCRIPTION = "BlackCAT telescope definition file"
+    DATA_TYPE = "teldef"
     DET_IDS = [0, 1, 2, 3]
     DET_PITCH_M = 40e-6
     NOMINAL_GAP_M = 1788e-6
@@ -191,7 +212,7 @@ class GenerateTeldef(GenerateCalDB):
                     ),
                     "CDES0001": ("TELESCOPE DEFINITION FILE", "Description"),
                 },
-                "",
+                [SEP, "CALDB Required Keywords"],
             ),
             (
                 {
@@ -201,18 +222,19 @@ class GenerateTeldef(GenerateCalDB):
                     "COORD2": ("SAT", "3rd coordinate system (SATX, SATY, SATZ)"),
                     "COORD3": ("SKY", "4th coordinate system (SKYX, SKYY)"),
                 },
-                "",
+                [SEP, "Generic Coordinate Keywords"],
             ),
             (
                 {
-                    "DET_IDS": (self.DET_IDS, "IDs of included detectors."),
+                    # TODO: Handle det_ids not working in fits headers
+                    # "DET_IDS": (self.DET_IDS, "IDs of included detectors."),
                     "RAW_XSIZ": (
                         self.RAW_SIZE * self.NUM_SUBPIXELS,
-                        "RAW address space x size (1/3 subpixels)",
+                        "RAW space x size (1/3 subpixels)",
                     ),
                     "RAWXPIX1": (
                         0.0,
-                        "RAW address space x first subpixel number (1/3 subpixel)",
+                        "RAW space x 1st subpix number (1/3 subpixel)",
                     ),
                     "RAW_XSCL": (
                         self.DET_PITCH_M / self.NUM_SUBPIXELS,
@@ -221,11 +243,11 @@ class GenerateTeldef(GenerateCalDB):
                     "RAW_XCOL": ("RAWX", "Name of raw X column in event files"),
                     "RAW_YSIZ": (
                         self.RAW_SIZE * self.NUM_SUBPIXELS,
-                        "RAW address space y size (1/3 subpixels)",
+                        "RAW space y size (1/3 subpixels)",
                     ),
                     "RAWYPIX1": (
                         0.0,
-                        "RAW address space y first subpixel number (1/3 subpixel)",
+                        "RAW space y 1st subpix number (1/3 subpixel)",
                     ),
                     "RAW_YSCL": (
                         self.DET_PITCH_M / self.NUM_SUBPIXELS,
@@ -234,7 +256,11 @@ class GenerateTeldef(GenerateCalDB):
                     "RAW_YCOL": ("RAWY", "Name of raw Y column in event files"),
                     "RAW_UNIT": ("1/3 subpixel", "physical unit of RAW coordinates"),
                 },
-                "",
+                [
+                    SEP,
+                    "RAW Coordinate Definition",
+                    "These are the subpixel coordinates in the telemetry",
+                ],
             ),
             (
                 {
@@ -246,42 +272,52 @@ class GenerateTeldef(GenerateCalDB):
                     "DET_YCOL": ("DETY", "Name of DET Y column in event files"),
                     "DET_UNIT": ("m", "physical unit of DET coordinates"),
                 },
-                "",
+                [
+                    SEP,
+                    "DET coordinates definition",
+                    "DET coorindates are fixed to the detector, look-down",
+                ],
             ),
             (
                 {
-                    "DET0_X0": (self._x0s[0],),
-                    "DET0_Y0": (self._y0s[0],),
-                    "DET0_DX_DCOL": (self._dx_dcols[0],),
-                    "DET0_DY_DCOL": (self._dy_dcols[0],),
-                    "DET0_DX_DROW": (self._dx_drows[0],),
-                    "DET0_DY_DROW": (self._dy_drows[0],),
-                    "DET1_X0": (self._x0s[1],),
-                    "DET1_Y0": (self._y0s[1],),
-                    "DET1_DX_DCOL": (self._dx_dcols[1],),
-                    "DET1_DY_DCOL": (self._dy_dcols[1],),
-                    "DET1_DX_DROW": (self._dx_drows[1],),
-                    "DET1_DY_DROW": (self._dy_drows[1],),
-                    "DET2_X0": (self._x0s[2],),
-                    "DET2_Y0": (self._y0s[2],),
-                    "DET2_DX_DCOL": (self._dx_dcols[2],),
-                    "DET2_DY_DCOL": (self._dy_dcols[2],),
-                    "DET2_DX_DROW": (self._dx_drows[2],),
-                    "DET2_DY_DROW": (self._dy_drows[2],),
-                    "DET3_X0": (self._x0s[3],),
-                    "DET3_Y0": (self._y0s[3],),
-                    "DET3_DX_DCOL": (self._dx_dcols[3],),
-                    "DET3_DY_DCOL": (self._dy_dcols[3],),
-                    "DET3_DX_DROW": (self._dx_drows[3],),
-                    "DET3_DY_DROW": (self._dy_drows[3],),
+                    # TODO: Fix DET#_Dn_Dmmm cards for being >8 chars
+                    "D0_X0": (self._x0s[0], ""),
+                    "D0_Y0": (self._y0s[0], ""),
+                    "D0_DXDCL": (self._dx_dcols[0], ""),
+                    "D0_DYDCL": (self._dy_dcols[0], ""),
+                    "D0_DXDRW": (self._dx_drows[0], ""),
+                    "D0_DYDRW": (self._dy_drows[0], ""),
+                    "D1_X0": (self._x0s[1], ""),
+                    "D1_Y0": (self._y0s[1], ""),
+                    "D1_DXDCL": (self._dx_dcols[1], ""),
+                    "D1_DYDCL": (self._dy_dcols[1], ""),
+                    "D1_DXDRW": (self._dx_drows[1], ""),
+                    "D1_DYDRW": (self._dy_drows[1], ""),
+                    "D2_X0": (self._x0s[2], ""),
+                    "D2_Y0": (self._y0s[2], ""),
+                    "D2_DXDCL": (self._dx_dcols[2], ""),
+                    "D2_DYDCL": (self._dy_dcols[2], ""),
+                    "D2_DXDRW": (self._dx_drows[2], ""),
+                    "D2_DYDRW": (self._dy_drows[2], ""),
+                    "D3_X0": (self._x0s[3], ""),
+                    "D3_Y0": (self._y0s[3], ""),
+                    "D3_DXDCL": (self._dx_dcols[3], ""),
+                    "D3_DYDCL": (self._dy_dcols[3], ""),
+                    "D3_DXDRW": (self._dx_drows[3], ""),
+                    "D3_DYDRW": (self._dy_drows[3], ""),
                 },
-                "",
+                [
+                    SEP,
+                    "Translation from RAW to DET coordinates:",
+                    "DETX = d#_X0 + RAWX*d#_DXDCL + RAWY*d#DXDRW",
+                    "DETY = d#_Y0 + RAWY*d#_DYDCL + RAWY*d#DYDRW",
+                ],
             ),
             (
                 {
                     "SAT_UNIT": ("m", "physical unit of SAT coordinates"),
                 },
-                "",
+                [SEP, "SAT coordinates definition:", "Look-down"],
             ),
             (
                 {
@@ -296,21 +332,35 @@ class GenerateTeldef(GenerateCalDB):
                     "ALIGNM33": (0.0, ""),
                     "ROLLSIGN": (-1, "BlackCAT Roll convention"),
                 },
-                "",
+                [SEP, "Translation from DET to SAT coordinates"],
             ),
             # TODO: Implement SKY coordinates and SAT -> SKY transforms
-            ({"FOCALLEN": (0.1540, "Telescope focal length (m)")}, ""),
+            (
+                {"FOCALLEN": (0.1540, "Telescope focal length (m)")},
+                [
+                    SEP,
+                    "The size of a sky pixel depends on the FPA pixel size, focal length,",
+                    "and chosen imaging resolution. 40 microns at a resolution of 1",
+                    "corresponds to atan(40e-6 / FOCALLEN) radians on the sky.",
+                ],
+            ),
             (
                 {
                     "OPTAXISX": (0.0, "Optical axis x in DET coordinates (m)"),
                     "OPTAXISY": (0.0, "Optical axis y in DET coordinates (m)"),
                 },
-                "",
+                [
+                    SEP,
+                    "DET and SAT are centered on the optical axis, not the distribution of",
+                    "detectors on the focal plane.",
+                ],
             ),
         ]
 
 
 class GenerateCodedMask(GenerateCalDB):
+    CONTENT_DESCRIPTION = "BlackCAT aperture file"
+    DATA_TYPE = "aperture"
     MASK_CELL_COUNT = [249, 555]
 
     def __init__(self, caldb_version: Optional[str] = CURRENT_CALDB_VER):
@@ -426,7 +476,7 @@ class GenerateCodedMask(GenerateCalDB):
                         "Description",
                     ),
                 },
-                "",
+                [SEP, "CALDB Required Keywords"],
             ),
             (
                 {
@@ -447,7 +497,7 @@ class GenerateCodedMask(GenerateCalDB):
                     "CRUNIT2": ("m", "Units of SATY"),
                     "CDELT2": (320e-6, "Spacing of cells in m"),
                 },
-                "",
+                [SEP, "BlackCAT aperture header"],
             ),
             (
                 {
@@ -461,7 +511,7 @@ class GenerateCodedMask(GenerateCalDB):
                     "MASKPSIY": (0.0, "[deg] Mask Euler rotation about Y-axis"),
                     "MASKPSIZ": (0.0, "[deg] Mask Euler rotation about Z-axis"),
                 },
-                "",
+                [SEP, "Mask position and orientation parameters"],
             ),
             (
                 {
@@ -469,7 +519,7 @@ class GenerateCodedMask(GenerateCalDB):
                     "MASKCELY": (295e-6, "[m] Size of mask cell in SATY"),
                     "MASKCELZ": (21e-6, "[m] Size of mask cell in SATZ"),
                 },
-                "",
+                [SEP, "Mask cell properties"],
             ),
             (
                 {
@@ -486,7 +536,7 @@ class GenerateCodedMask(GenerateCalDB):
                     "DETOFFY": (0.0, "[m] Offset of detector plane in SATY"),
                     "DETOFFZ": (0.0, "[m] Offset of detector plane in SATZ"),
                 },
-                "",
+                [SEP, "Detector plane position parameters"],
             ),
             (
                 {
@@ -497,9 +547,76 @@ class GenerateCodedMask(GenerateCalDB):
                     "DETSIZEY": (40e-6, "[m] Size of detector pixel in SATX"),
                     "DETSIZEZ": (100e-6, "[m] Size of detector pixel in SATX"),
                 },
-                "",
+                [SEP, "Detector size properties"],
             ),
         ]
+
+    def generate_fits_file(
+        self,
+        outdir: Optional[PathLike | str] = None,
+    ) -> fits.HDUList:
+        primary_hdu = super().generate_fits_file(outdir=None)
+
+        mask_ext_header = fits.Header(
+            cards=[
+                ("EXTNAME", "CODED_MASK", "Name of the image extension"),
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in MANDATORY_KEYWORDS.items()
+                ],
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in MANDATORY_TABLE_KEYWORDS.items()
+                ],
+                ("VERSION", self.version, "Extension version number"),
+                ("FILENAME", self.outname, "File name"),
+                ("CONTENT", "BlackCAT coded mask aperture pattern", "File content"),
+                *[("COMMENT", comment) for comment in self._commented_dicts[0][1]],
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in self._commented_dicts[0][0].items()
+                ],
+            ]
+        )
+        mask_ext = fits.PrimaryHDU(
+            data=self._mask_pattern.astype(np.uint8), header=mask_ext_header
+        )
+
+        frame_ext_header = fits.Header(
+            cards=[
+                ("EXTNAME", "SUPPORT_FRAME", "Name of the image extension"),
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in MANDATORY_KEYWORDS.items()
+                ],
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in MANDATORY_TABLE_KEYWORDS.items()
+                ],
+                (
+                    "CONTENT",
+                    "BlackCAT coded mask support frame pattern",
+                    "File content",
+                ),
+                ("FILENAME", self.outname, "File name"),
+                ("VERSION", self.version, "Extension version number"),
+                *[("COMMENT", comment) for comment in self._commented_dicts[0][1]],
+                *[
+                    (key, value, comment)
+                    for key, (value, comment) in self._commented_dicts[0][0].items()
+                ],
+            ]
+        )
+        frame_ext = fits.PrimaryHDU(
+            data=self._frame_pattern.astype(np.uint8), header=frame_ext_header
+        )
+
+        hdul = fits.HDUList([primary_hdu, mask_ext, frame_ext])
+
+        if outdir is not None:
+            hdul.writeto(Path(outdir) / self.outname, checksum=True)
+
+        return hdul
 
     @staticmethod
     def shift_reg_seq(seql: int, seed: int) -> npt.NDArray[np.bool_]:

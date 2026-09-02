@@ -44,6 +44,7 @@ class Teldef(CalDB):
     coord2: str
     coord3: str
 
+    # TODO: Handle det_ids not working in fits headers
     det_ids: list[int]
     raw_xsiz: float
     rawxpix1: float
@@ -63,30 +64,30 @@ class Teldef(CalDB):
     det_ycol: str
     det_unit: str
 
-    det0_x0: float
-    det0_y0: float
-    det0_dx_dcol: float
-    det0_dy_dcol: float
-    det0_dx_drow: float
-    det0_dy_drow: float
-    det1_x0: float
-    det1_y0: float
-    det1_dx_dcol: float
-    det1_dy_dcol: float
-    det1_dx_drow: float
-    det1_dy_drow: float
-    det2_x0: float
-    det2_y0: float
-    det2_dx_dcol: float
-    det2_dy_dcol: float
-    det2_dx_drow: float
-    det2_dy_drow: float
-    det3_x0: float
-    det3_y0: float
-    det3_dx_dcol: float
-    det3_dy_dcol: float
-    det3_dx_drow: float
-    det3_dy_drow: float
+    d0_x0: float
+    d0_y0: float
+    d0_dxdcl: float
+    d0_dydcl: float
+    d0_dxdrw: float
+    d0_dydrw: float
+    d1_x0: float
+    d1_y0: float
+    d1_dxdcl: float
+    d1_dydcl: float
+    d1_dxdrw: float
+    d1_dydrw: float
+    d2_x0: float
+    d2_y0: float
+    d2_dxdcl: float
+    d2_dydcl: float
+    d2_dxdrw: float
+    d2_dydrw: float
+    d3_x0: float
+    d3_y0: float
+    d3_dxdcl: float
+    d3_dydcl: float
+    d3_dxdrw: float
+    d3_dydrw: float
 
     sat_unit: str
 
@@ -142,14 +143,14 @@ class Teldef(CalDB):
         for detid in self.det_ids:
             detid_mask = detids == detid
             detxs[detid_mask] = (
-                getattr(self, f"det{detid}_x0")
-                + rawxs[detid_mask] * getattr(self, f"det{detid}_dx_dcol")
-                + rawys[detid_mask] * getattr(self, f"det{detid}_dx_drow")
+                getattr(self, f"d{detid}_x0")
+                + rawxs[detid_mask] * getattr(self, f"d{detid}_dxdcl")
+                + rawys[detid_mask] * getattr(self, f"d{detid}_dxdrw")
             )
             detys[detid_mask] = (
-                getattr(self, f"det{detid}_y0")
-                + rawxs[detid_mask] * getattr(self, f"det{detid}_dy_dcol")
-                + rawys[detid_mask] * getattr(self, f"det{detid}_dy_drow")
+                getattr(self, f"d{detid}_y0")
+                + rawxs[detid_mask] * getattr(self, f"d{detid}_dydcl")
+                + rawys[detid_mask] * getattr(self, f"d{detid}_dydrw")
             )
 
         return detxs, detys
