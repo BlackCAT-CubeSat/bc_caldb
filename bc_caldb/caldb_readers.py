@@ -1,3 +1,7 @@
+"""Reader dataclasses to ingest BlackCAT CalDB keywords and files and
+expose them for use in python.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from os import PathLike
@@ -16,8 +20,16 @@ from bc_caldb.constants import CURRENT_CALDB_VER
 
 @dataclass(frozen=True)
 class CalDB(ABC):
+    """Abstract class for shared methods all BlackCAT CalDB
+    readers use.
+    """
+
     @classmethod
     def from_caldb_file(cls, caldb_file: PathLike | str):
+        """Generate a CalDB dataclass by reading in a CalDB fits file.
+
+        Not currently implemented.
+        """
         raise NotImplementedError()
 
     @classmethod
@@ -25,12 +37,24 @@ class CalDB(ABC):
     def from_caldb_version(
         cls, generator: GenerateCalDB, caldb_version: str = CURRENT_CALDB_VER
     ):
+        """Use a BlackCAT CalDB generator to generate a CalDB
+        dataclass.
+
+        Arguments:
+            generator: Which CalDB generator class to use
+            caldb_version: BlackCAT CalDB version string. Defaults to
+            the most recent version.
+        """
         caldb_generator = generator(caldb_version)
         return cls(**caldb_generator.generation_keywords)
 
 
 @dataclass(frozen=True)
 class Teldef(CalDB):
+    """Reader for BlackCAT Teldef CalDB. Exposes the CalDB keywords to
+    be used in python.
+    """
+
     ccls0001: str
     ccnm0001: str
     cdtp0001: str
@@ -112,7 +136,22 @@ class Teldef(CalDB):
         detxs: npt.NDArray[np.floating[Any]],
         detys: npt.NDArray[np.floating[Any]],
         detzs: Optional[npt.NDArray[np.floating[Any]]] = None,
-    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
+    ]:
+        """Use provided CalDB values to convert from DET coordinates
+        to SAT coordinates.
+
+        DETX axis is nominally aligned with SATZ axis, and DETZ
+        pseudo-axis is nominally aligned with SATX axis.
+
+        Arguments:
+            detxs: Numpy array of DETX values
+            detys: Numpy array of DETY values
+            detzs: (Optional) Numpy array of DETZ pseudo-values
+            (How far below the top of the detector plane you want to
+            convert.)
+        """
         if detzs is None:
             detzs = np.zeros(detxs.shape, dtype=np.float64)
 
@@ -137,6 +176,14 @@ class Teldef(CalDB):
         npt.NDArray[np.float64],
         npt.NDArray[np.float64],
     ]:
+        """Use provided CalDB values to convert from RAW coordinates to DET coordinates.
+
+        Arguments:
+            rawxs: Numpy array of RAWX values
+            rawys: Numpy array of RAWY values
+            detids: Numpy array of which detector each (RAWX, RAWY)
+            pair comes from
+        """
         detxs = np.zeros(rawxs.shape, dtype=np.float64)
         detys = np.zeros(rawys.shape, dtype=np.float64)
 
@@ -157,11 +204,22 @@ class Teldef(CalDB):
 
     @classmethod
     def from_caldb_version(cls, caldb_version: str = CURRENT_CALDB_VER):
+        """Use a BlackCAT CalDB generator to generate a Teldef
+        dataclass.
+
+        Arguments:
+            caldb_version: BlackCAT CalDB version string. Defaults to
+            the most recent version.
+        """
         return super().from_caldb_version(GenerateTeldef, caldb_version)
 
 
 @dataclass(frozen=True)
 class CodedMask(CalDB):
+    """Reader for BlackCAT Aperture CalDB. Exposes the CalDB keywords to
+    be used in python.
+    """
+
     ccls0001: str
     ccnm0001: str
     cdtp0001: str
@@ -213,4 +271,11 @@ class CodedMask(CalDB):
 
     @classmethod
     def from_caldb_version(cls, caldb_version: str = CURRENT_CALDB_VER):
+        """Use a BlackCAT CalDB generator to generate an Aperture
+        dataclass.
+
+        Arguments:
+            caldb_version: BlackCAT CalDB version string. Defaults to
+            the most recent version.
+        """
         return super().from_caldb_version(GenerateCodedMask, caldb_version)
