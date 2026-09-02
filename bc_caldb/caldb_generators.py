@@ -1,3 +1,5 @@
+"""Generator classes to produce BlackCAT CalDB keywords and files."""
+
 from abc import ABC, abstractmethod
 from datetime import datetime, UTC
 from enum import StrEnum
@@ -29,15 +31,27 @@ SEP = "-" * 70
 
 
 class CalDBVersions(StrEnum):
+    """Tracker for all valid BlackCAT CalDB Versions"""
+
     DEFAULT = ""
     V20260614 = "20260614"
 
 
 class GenerateCalDB(ABC):
+    """Abstract class for shared methods all BlackCAT CalDB
+    generators use.
+    """
+
     CONTENT_DESCRIPTION: str
     DATA_TYPE: str
 
     def __init__(self, caldb_version: Optional[str] = CURRENT_CALDB_VER):
+        """CalDB keyword generator
+
+        Arguments:
+            caldb_version: BlackCAT CalDB version string. Defaults to
+            the most recent version.
+        """
         if not isinstance(caldb_version, str | None):
             raise TypeError(
                 f"expected caldb_version to be str or None, got {type(caldb_version)}"
@@ -45,10 +59,11 @@ class GenerateCalDB(ABC):
         self._caldb_version = caldb_version if caldb_version is not None else ""
         if self._caldb_version not in CalDBVersions:
             raise ValueError(f"invalid caldb_version: {self._caldb_version}")
-        self.generate_caldb_values()
+        self._generate_caldb_values()
 
     @cached_property
     def generation_keywords(self) -> dict[str, Any]:
+        """Dictionary of all keywords used to read this CalDB."""
         generation_keywords = {
             key.lower(): val[0]
             for tuple in self._commented_dicts
@@ -59,21 +74,36 @@ class GenerateCalDB(ABC):
 
     @cached_property
     def outname(self) -> str:
+        """File name that this CalDB will be saved as."""
         return f"bl{self.DATA_TYPE}{self._caldb_version}v{self.version:03}.fits.gz"
 
     @cached_property
     def version(self) -> int:
+        """Which version of a given CalDB date is being used. Currently
+        there is only support for one version per date.
+        """
         # NOTE: Currently no support for versions other than 001.
         return 1
 
     @abstractmethod
-    def generate_caldb_values(self) -> None:
+    def _generate_caldb_values(self) -> None:
+        # Generates the necessary values for a given CalDB given a
+        # specific version.
         self._commented_dicts: list[tuple[dict[str, tuple[Any, str]], list[str]]]
 
     def generate_fits_file(
         self,
         outdir: Optional[PathLike | str] = None,
     ) -> fits.PrimaryHDU:
+        """Writes the generated CalDB values to a fits primary hdu.
+
+        If outdir is provided, it will write this hdu to a fits file in
+        the provided directory.
+
+        Arguments:
+            outdir: (Optional) Path to the directory to write the CalDB
+            fits file to.
+        """
         header = fits.Header(
             cards=[
                 *[
@@ -105,6 +135,8 @@ class GenerateCalDB(ABC):
 
 
 class GenerateTeldef(GenerateCalDB):
+    """Generator for BlackCAT Teldef CalDB file."""
+
     CONTENT_DESCRIPTION = "BlackCAT telescope definition file"
     DATA_TYPE = "teldef"
     DET_IDS = [0, 1, 2, 3]
@@ -118,10 +150,14 @@ class GenerateTeldef(GenerateCalDB):
 
     @cached_property
     def _c(self) -> float:
+        # Nominal distance from optical axis to the center of the
+        # subpixel row along the edge of the focal plane.
         return self.DET_PITCH_M * (self.RAW_SIZE - 1 / 6) + self.NOMINAL_GAP_M / 2
 
     @cached_property
     def _det_offsets_dict(self) -> dict[str, dict[str, npt.NDArray[np.float32]]]:
+        # Dictionary holding the offsets from nominal positions for
+        # each of the four detectors.
         det_offsets_dict = {
             CalDBVersions.DEFAULT: {
                 "x": np.array([0, 0, 0, 0], dtype=np.float32),
@@ -139,6 +175,7 @@ class GenerateTeldef(GenerateCalDB):
 
     @cached_property
     def _dx_dcols(self) -> npt.NDArray[np.float32]:
+        # dx_dcol values for each detector
         return np.array(
             [
                 -self.DET_PITCH_M / self.NUM_SUBPIXELS,
@@ -151,6 +188,7 @@ class GenerateTeldef(GenerateCalDB):
 
     @cached_property
     def _dx_drows(self) -> npt.NDArray[np.float32]:
+        # dx_drow values for each detector
         return np.array(
             [
                 0,
@@ -163,6 +201,7 @@ class GenerateTeldef(GenerateCalDB):
 
     @cached_property
     def _dy_dcols(self) -> npt.NDArray[np.float32]:
+        # dy_dcol values for each detector
         return np.array(
             [
                 0,
@@ -175,6 +214,7 @@ class GenerateTeldef(GenerateCalDB):
 
     @cached_property
     def _dy_drows(self) -> npt.NDArray[np.float32]:
+        # dy_drow values for each detector
         return np.array(
             [
                 -self.DET_PITCH_M / self.NUM_SUBPIXELS,
@@ -187,15 +227,21 @@ class GenerateTeldef(GenerateCalDB):
 
     @cached_property
     def _x0s(self) -> npt.NDArray[np.float32]:
+        # DETX value at the center of the subpixel column along the
+        # outside edge of the focal plane for each detector.
         base_x0 = np.array([self._c, -self._c, -self._c, self._c], dtype=np.float32)
         return base_x0 + self._det_offsets_dict[self._caldb_version]["x"]
 
     @cached_property
     def _y0s(self) -> npt.NDArray[np.float32]:
+        # DETY value at the center of the subpixel row along the
+        # outside edge of the focal plane for each detector.
         base_y0 = np.array([self._c, -self._c, self._c, -self._c], dtype=np.float32)
         return base_y0 + self._det_offsets_dict[self._caldb_version]["y"]
 
-    def generate_caldb_values(self) -> None:
+    def _generate_caldb_values(self) -> None:
+        # Generates the necessary values for a given CalDB given a
+        # specific version.
         self._commented_dicts = [
             (
                 {
@@ -359,6 +405,8 @@ class GenerateTeldef(GenerateCalDB):
 
 
 class GenerateCodedMask(GenerateCalDB):
+    """Generator for BlackCAT Aperture CalDB file."""
+
     CONTENT_DESCRIPTION = "BlackCAT aperture file"
     DATA_TYPE = "aperture"
     MASK_CELL_COUNT = [249, 555]
@@ -368,6 +416,9 @@ class GenerateCodedMask(GenerateCalDB):
 
     @cached_property
     def _det_cent_sat_xy(self) -> tuple[float, float]:
+        # (DETX, DETY) coordinates of the center of the detector plane.
+        # (0, 0) is the optical axis, but shifted detectors means that
+        # the center of the detector plane isn't necessary aligned.
         generated_teldef = GenerateTeldef(self._caldb_version)
         detx_center = (
             generated_teldef.generation_keywords["detx_max"]
@@ -381,6 +432,9 @@ class GenerateCodedMask(GenerateCalDB):
 
     @cached_property
     def _frame_pattern(self) -> npt.NDArray[np.bool_]:
+        # Pattern showing where the extra support structures are for
+        # the mask. Important to track since the mask's 50% open ratio
+        # only holds outside the frame.
         pattern = np.zeros(shape=self.MASK_CELL_COUNT, dtype=bool)
 
         # Main ribs
@@ -422,6 +476,7 @@ class GenerateCodedMask(GenerateCalDB):
 
     @cached_property
     def _mask_pattern(self) -> npt.NDArray[np.bool_]:
+        # Coded aperture mask pattern.
         ny, nx = self.MASK_CELL_COUNT
 
         pattern = (
@@ -434,6 +489,9 @@ class GenerateCodedMask(GenerateCalDB):
 
     @cached_property
     def _ribs(self) -> npt.NDArray[np.uint16]:
+        # Pattern showing where the support ribs are. Used to construct
+        # the frame pattern when combined with fillets and screw
+        # gussets.
         ribhw = 3.5
         xriby = self.MASK_CELL_COUNT[0] / 2
         xcellcount = self.MASK_CELL_COUNT[1]
@@ -454,9 +512,12 @@ class GenerateCodedMask(GenerateCalDB):
 
     @cached_property
     def _yribx(self) -> npt.NDArray[np.float32]:
+        # x locations for the centerlines of the vertical ribs.
         return np.array([138.5, 277.5, 416.5], dtype=np.float32)
 
-    def generate_caldb_values(self) -> None:
+    def _generate_caldb_values(self) -> None:
+        # Generates the necessary values for a given CalDB given a
+        # specific version.
         self._commented_dicts = [
             (
                 {
@@ -555,6 +616,16 @@ class GenerateCodedMask(GenerateCalDB):
         self,
         outdir: Optional[PathLike | str] = None,
     ) -> fits.HDUList:
+        """Writes the generated CalDB values and mask/frame patterns
+        to a fits HDUList.
+
+        If outdir is provided, it will write this hdu to a fits file in
+        the provided directory.
+
+        Arguments:
+            outdir: (Optional) Path to the directory to write the CalDB
+            fits file to.
+        """
         primary_hdu = super().generate_fits_file(outdir=None)
 
         mask_ext_header = fits.Header(
@@ -620,6 +691,9 @@ class GenerateCodedMask(GenerateCalDB):
 
     @staticmethod
     def shift_reg_seq(seql: int, seed: int) -> npt.NDArray[np.bool_]:
+        """Given a sequence length and seed, generates a LFSR sequence
+        for building a mask pattern.
+        """
         nbits = int(np.ceil(np.log2(seql + 1)))
 
         taplist = [
