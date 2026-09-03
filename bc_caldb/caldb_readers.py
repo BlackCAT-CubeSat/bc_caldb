@@ -15,7 +15,7 @@ from bc_caldb.caldb_generators import (
     GenerateCodedMask,
     GenerateTeldef,
 )
-from bc_caldb.constants import CURRENT_CALDB_VER
+from bc_caldb.constants import CURRENT_CALDB_VER, LIST_KEYWORDS, LIST_KEYWORD_SEP
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,8 @@ class CalDB(ABC):
 
         Not currently implemented.
         """
+        # TODO: Implement converting of list keywords back to lists
+        # keyword = keyword.split(LIST_KEYWORD_SEP)
         raise NotImplementedError()
 
     @classmethod
@@ -68,7 +70,6 @@ class Teldef(CalDB):
     coord2: str
     coord3: str
 
-    # TODO: Handle det_ids not working in fits headers
     det_ids: list[int]
     raw_xsiz: float
     rawxpix1: float

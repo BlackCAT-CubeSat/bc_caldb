@@ -12,7 +12,12 @@ from astropy.io import fits
 import numpy as np
 import numpy.typing as npt
 
-from bc_caldb.constants import CURRENT_CALDB_VER, DEFAULT_MASK_SEED
+from bc_caldb.constants import (
+    CURRENT_CALDB_VER,
+    DEFAULT_MASK_SEED,
+    LIST_KEYWORDS,
+    LIST_KEYWORD_SEP,
+)
 
 
 MANDATORY_KEYWORDS = {
@@ -121,6 +126,9 @@ class GenerateCalDB(ABC):
         )
         for section_dict, section_comments in self._commented_dicts:
             for key, (value, comment) in section_dict.items():
+                if key in LIST_KEYWORDS:
+                    value = LIST_KEYWORD_SEP.join(str(val) for val in value)
+
                 header.set(key, value, comment)
 
             for comment in section_comments:
@@ -272,8 +280,7 @@ class GenerateTeldef(GenerateCalDB):
             ),
             (
                 {
-                    # TODO: Handle det_ids not working in fits headers
-                    # "DET_IDS": (self.DET_IDS, "IDs of included detectors."),
+                    "DET_IDS": (self.DET_IDS, "IDs of included detectors."),
                     "RAW_XSIZ": (
                         self.RAW_SIZE * self.NUM_SUBPIXELS,
                         "RAW space x size (1/3 subpixels)",
@@ -326,7 +333,6 @@ class GenerateTeldef(GenerateCalDB):
             ),
             (
                 {
-                    # TODO: Fix DET#_Dn_Dmmm cards for being >8 chars
                     "D0_X0": (self._x0s[0], ""),
                     "D0_Y0": (self._y0s[0], ""),
                     "D0_DXDCL": (self._dx_dcols[0], ""),
