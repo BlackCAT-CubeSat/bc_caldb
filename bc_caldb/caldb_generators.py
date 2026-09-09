@@ -272,9 +272,8 @@ class GenerateTeldef(GenerateCalDB):
                 {
                     "NCOORDS": (2, "Number of coordinates defined in this file"),
                     "COORD0": ("RAW", "1st coordinate system (DETID, RAWX, RAWY)"),
-                    "COORD1": ("DET", "2nd coordinate system (DETX, DETY)"),
+                    "COORD1": ("DET", "2nd coordinate system (DETX, DETY, DETZ)"),
                     "COORD2": ("SAT", "3rd coordinate system (SATX, SATY, SATZ)"),
-                    "COORD3": ("SKY", "4th coordinate system (SKYX, SKYY)"),
                 },
                 [SEP, "Generic Coordinate Keywords"],
             ),
@@ -329,6 +328,7 @@ class GenerateTeldef(GenerateCalDB):
                     SEP,
                     "DET coordinates definition",
                     "DET coorindates are fixed to the detector, look-down",
+                    "DETZ is positive toward this viewpoint",
                 ],
             ),
             (
@@ -365,28 +365,7 @@ class GenerateTeldef(GenerateCalDB):
                     "DETY = d#_Y0 + RAWY*d#_DYDCL + RAWY*d#DYDRW",
                 ],
             ),
-            (
-                {
-                    "SAT_UNIT": ("m", "physical unit of SAT coordinates"),
-                },
-                [SEP, "SAT coordinates definition:", "Look-down"],
-            ),
-            (
-                {
-                    "ALIGNM11": (0.0, "DET - > SAT coordinates alignment matrix Mij"),
-                    "ALIGNM12": (0.0, ""),
-                    "ALIGNM13": (-1.0, ""),
-                    "ALIGNM21": (0.0, "[3x3 rotation matrix from focal plane to SAT]"),
-                    "ALIGNM22": (-1.0, ""),
-                    "ALIGNM23": (0.0, "SATX = M11*DETX + M12*DETY + M13*DETZ"),
-                    "ALIGNM31": (-1.0, "SATY = M21*DETX + M22*DETY + M23*DETZ"),
-                    "ALIGNM32": (0.0, "SATZ = M31*DETX + M32*DETY + M33*DETZ"),
-                    "ALIGNM33": (0.0, ""),
-                    "ROLLSIGN": (-1, "BlackCAT Roll convention"),
-                },
-                [SEP, "Translation from DET to SAT coordinates"],
-            ),
-            # TODO: Implement SKY coordinates and SAT -> SKY transforms
+            # TODO: Implement SAT coordinates and DET -> SAT transforms
             (
                 {"FOCALLEN": (0.1540, "Telescope focal length (m)")},
                 [
@@ -403,7 +382,7 @@ class GenerateTeldef(GenerateCalDB):
                 },
                 [
                     SEP,
-                    "DET and SAT are centered on the optical axis, not the distribution of",
+                    "DET is centered on the optical axis, not the distribution of",
                     "detectors on the focal plane.",
                 ],
             ),
@@ -415,24 +394,24 @@ class GenerateCodedMask(GenerateCalDB):
 
     CONTENT_DESCRIPTION = "BlackCAT aperture file"
     DATA_TYPE = "aperture"
-    MASK_CELL_COUNT = [249, 555]
+    MASK_SHAPE = [249, 555]
 
     def __init__(self, caldb_version: Optional[str] = CURRENT_CALDB_VER):
         super().__init__(caldb_version)
 
     @cached_property
-    def _det_cent_sat_xy(self) -> tuple[float, float]:
+    def _det_cent_det_xy(self) -> tuple[float, float]:
         # (DETX, DETY) coordinates of the center of the detector plane.
         # (0, 0) is the optical axis, but shifted detectors means that
         # the center of the detector plane isn't necessary aligned.
         generated_teldef = GenerateTeldef(self._caldb_version)
         detx_center = (
             generated_teldef.generation_keywords["detx_max"]
-            - generated_teldef.generation_keywords["detx_min"]
+            + generated_teldef.generation_keywords["detx_min"]
         ) / 2
         dety_center = (
             generated_teldef.generation_keywords["dety_max"]
-            - generated_teldef.generation_keywords["dety_min"]
+            + generated_teldef.generation_keywords["dety_min"]
         ) / 2
         return detx_center, dety_center
 
@@ -441,15 +420,15 @@ class GenerateCodedMask(GenerateCalDB):
         # Pattern showing where the extra support structures are for
         # the mask. Important to track since the mask's 50% open ratio
         # only holds outside the frame.
-        pattern = np.zeros(shape=self.MASK_CELL_COUNT, dtype=bool)
+        pattern = np.zeros(shape=self.MASK_SHAPE, dtype=bool)
 
         # Main ribs
         for xlow, ylow, xblocksize, yblocksize in self._ribs:
             pattern[ylow : ylow + yblocksize, xlow : xlow + xblocksize] = True
 
         # Manual fillets
-        for xrib_l in [-4, self.MASK_CELL_COUNT[0] // 2, self.MASK_CELL_COUNT[0] + 3]:
-            for yrib_l in [-4, self.MASK_CELL_COUNT[1] + 3] + list(
+        for xrib_l in [-4, self.MASK_SHAPE[0] // 2, self.MASK_SHAPE[0] + 3]:
+            for yrib_l in [-4, self.MASK_SHAPE[1] + 3] + list(
                 self._yribx.astype(int)
             ):
                 pattern[
@@ -464,7 +443,7 @@ class GenerateCodedMask(GenerateCalDB):
 
         # Screwhole gussets
         for yrib_l in self._yribx.astype(int):
-            for y, ysign in [(0, 1), (self.MASK_CELL_COUNT[0] - 1, -1)]:
+            for y, ysign in [(0, 1), (self.MASK_SHAPE[0] - 1, -1)]:
                 for dy, w in enumerate([19, 15, 13, 11, 9]):
                     pattern[y + dy * ysign, yrib_l - w // 2 : yrib_l + w // 2 + 1] = (
                         True
@@ -483,15 +462,15 @@ class GenerateCodedMask(GenerateCalDB):
     @cached_property
     def _mask_pattern(self) -> npt.NDArray[np.bool_]:
         # Coded aperture mask pattern.
-        ny, nx = self.MASK_CELL_COUNT
+        ny, nx = self.MASK_SHAPE
 
         pattern = (
             np.array(self.shift_reg_seq(nx * ny, DEFAULT_MASK_SEED), dtype=bool)
-            .reshape(self.MASK_CELL_COUNT[::-1])
+            .reshape(self.MASK_SHAPE[::-1])
             .T
         )
 
-        return pattern[::-1, :] & ~self._frame_pattern
+        return pattern & ~self._frame_pattern
 
     @cached_property
     def _ribs(self) -> npt.NDArray[np.uint16]:
@@ -499,10 +478,10 @@ class GenerateCodedMask(GenerateCalDB):
         # the frame pattern when combined with fillets and screw
         # gussets.
         ribhw = 3.5
-        xriby = self.MASK_CELL_COUNT[0] / 2
-        xcellcount = self.MASK_CELL_COUNT[1]
+        xriby = self.MASK_SHAPE[0] / 2
+        xcellcount = self.MASK_SHAPE[1]
         yribx = self._yribx
-        ycellcount = self.MASK_CELL_COUNT[0]
+        ycellcount = self.MASK_SHAPE[0]
 
         ribs = np.array(
             [
@@ -547,33 +526,33 @@ class GenerateCodedMask(GenerateCalDB):
             ),
             (
                 {
-                    "CTYPE1": ("SATX", "Title of this axis"),
+                    "CTYPE1": ("DETX", "Title of this axis"),
                     "CRPIX1": (-0.5, "Reference is lower left corner of mask"),
                     "CRVAL1": (
-                        -self.MASK_CELL_COUNT[1] * 320e-6 / 2,
-                        "Value of SATX at reference point",
+                        -self.MASK_SHAPE[1] * 320e-6 / 2,
+                        "Value of DETX at reference point",
                     ),
-                    "CRUNIT1": ("m", "Units of SATX"),
+                    "CRUNIT1": ("m", "Units of DETX"),
                     "CDELT1": (320e-6, "Spacing of cells in m"),
-                    "CTYPE2": ("SATY", "Title of this axis"),
+                    "CTYPE2": ("DETY", "Title of this axis"),
                     "CRPIX2": (-0.5, "Reference is lower left corner of mask)"),
                     "CRVAL2": (
-                        -self.MASK_CELL_COUNT[0] * 320e-6 / 2,
-                        "Value of SATY at reference point",
+                        -self.MASK_SHAPE[0] * 320e-6 / 2,
+                        "Value of DETY at reference point",
                     ),
-                    "CRUNIT2": ("m", "Units of SATY"),
+                    "CRUNIT2": ("m", "Units of DETY"),
                     "CDELT2": (320e-6, "Spacing of cells in m"),
                 },
                 [SEP, "BlackCAT aperture header"],
             ),
             (
                 {
-                    "MASKSATX": (-0.1540, "[m] Center of mask cell plane in SATX"),
-                    "MASKSATY": (0.0, "[m] Center of mask cell plane in SATY"),
-                    "MASKSATZ": (0.0, "[m] Top of mask cell plane in SATZ"),
-                    "MASKOFFX": (0.0, "[m] Offset of mask in SATX"),
-                    "MASKOFFY": (0.0, "[m] Offset of mask in SATY"),
-                    "MASKOFFZ": (0.0, "[m] Offset of mask in SATZ"),
+                    "MASKDETX": (0.0, "[m] Center of mask cell plane in DETX"),
+                    "MASKDETY": (0.0, "[m] Center of mask cell plane in DETY"),
+                    "MASKDETZ": (0.1540, "[m] Top of mask cell plane in DETZ"),
+                    "MASKOFFX": (0.0, "[m] Offset of mask in DETX"),
+                    "MASKOFFY": (0.0, "[m] Offset of mask in DETY"),
+                    "MASKOFFZ": (0.0, "[m] Offset of mask in DETZ"),
                     "MASKPSIX": (0.0, "[deg] Mask Euler rotation about X-axis"),
                     "MASKPSIY": (0.0, "[deg] Mask Euler rotation about Y-axis"),
                     "MASKPSIZ": (0.0, "[deg] Mask Euler rotation about Z-axis"),
@@ -582,37 +561,37 @@ class GenerateCodedMask(GenerateCalDB):
             ),
             (
                 {
-                    "MASKCELX": (295e-6, "[m] Size of mask cell in SATX"),
-                    "MASKCELY": (295e-6, "[m] Size of mask cell in SATY"),
-                    "MASKCELZ": (21e-6, "[m] Size of mask cell in SATZ"),
+                    "MASKCELX": (295e-6, "[m] Size of mask cell in DETX"),
+                    "MASKCELY": (295e-6, "[m] Size of mask cell in DETY"),
+                    "MASKCELZ": (21e-6, "[m] Size of mask cell in DETZ"),
                 },
                 [SEP, "Mask cell properties"],
             ),
             (
                 {
-                    "DETSATX": (0.0, "[m] Top of detector plane in SATX"),
-                    "DETSATY": (
-                        -self._det_cent_sat_xy[1],
-                        "[m] Center of detector plane in SATY",
+                    "DETDETX": (0.0, "[m] Top of detector plane in DETX"),
+                    "DETDETY": (
+                        self._det_cent_det_xy[1],
+                        "[m] Center of detector plane in DETY",
                     ),
-                    "DETSATZ": (
-                        -self._det_cent_sat_xy[0],
-                        "[m] Center of detector plane in SATZ",
+                    "DETDETZ": (
+                        self._det_cent_det_xy[0],
+                        "[m] Center of detector plane in DETZ",
                     ),
-                    "DETOFFX": (0.0, "[m] Offset of detector plane in SATX"),
-                    "DETOFFY": (0.0, "[m] Offset of detector plane in SATY"),
-                    "DETOFFZ": (0.0, "[m] Offset of detector plane in SATZ"),
+                    "DETOFFX": (0.0, "[m] Offset of detector plane in DETX"),
+                    "DETOFFY": (0.0, "[m] Offset of detector plane in DETY"),
+                    "DETOFFZ": (0.0, "[m] Offset of detector plane in DETZ"),
                 },
                 [SEP, "Detector plane position parameters"],
             ),
             (
                 {
-                    "DETPIXX": (40e-6, "[m] Size of detector pitch pixel in SATX"),
-                    "DETPIXY": (40e-6, "[m] Size of detector pitch pixel in SATX"),
-                    "DETPIXZ": (100e-6, "[m] Size of detector pitch pixel in SATX"),
-                    "DETSIZEX": (40e-6, "[m] Size of detector pixel in SATX"),
-                    "DETSIZEY": (40e-6, "[m] Size of detector pixel in SATX"),
-                    "DETSIZEZ": (100e-6, "[m] Size of detector pixel in SATX"),
+                    "DETPIXX": (40e-6, "[m] Size of detector pitch pixel in DETX"),
+                    "DETPIXY": (40e-6, "[m] Size of detector pitch pixel in DETX"),
+                    "DETPIXZ": (100e-6, "[m] Size of detector pitch pixel in DETX"),
+                    "DETSIZEX": (40e-6, "[m] Size of detector pixel in DETX"),
+                    "DETSIZEY": (40e-6, "[m] Size of detector pixel in DETX"),
+                    "DETSIZEZ": (100e-6, "[m] Size of detector pixel in DETX"),
                 },
                 [SEP, "Detector size properties"],
             ),
