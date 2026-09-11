@@ -68,7 +68,6 @@ class Teldef(CalDB):
     coord0: str
     coord1: str
     coord2: str
-    coord3: str
 
     det_ids: list[int]
     raw_xsiz: float
@@ -114,59 +113,10 @@ class Teldef(CalDB):
     d3_dxdrw: float
     d3_dydrw: float
 
-    sat_unit: str
-
-    alignm11: float
-    alignm12: float
-    alignm13: float
-    alignm21: float
-    alignm22: float
-    alignm23: float
-    alignm31: float
-    alignm32: float
-    alignm33: float
-    rollsign: int
-
     focallen: float
 
     optaxisx: int
     optaxisy: int
-
-    def detxyz_to_satxyz(
-        self,
-        detxs: npt.NDArray[np.floating[Any]],
-        detys: npt.NDArray[np.floating[Any]],
-        detzs: Optional[npt.NDArray[np.floating[Any]]] = None,
-    ) -> tuple[
-        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
-    ]:
-        """Use provided CalDB values to convert from DET coordinates
-        to SAT coordinates.
-
-        DETX axis is nominally aligned with SATZ axis, and DETZ
-        pseudo-axis is nominally aligned with SATX axis.
-
-        Arguments:
-            detxs: Numpy array of DETX values
-            detys: Numpy array of DETY values
-            detzs: (Optional) Numpy array of DETZ pseudo-values
-            (How far below the top of the detector plane you want to
-            convert.)
-        """
-        if detzs is None:
-            detzs = np.zeros(detxs.shape, dtype=np.float64)
-
-        satx = (
-            detxs * self.alignm11 + detys * self.alignm12 + detzs * self.alignm13
-        ).astype(np.float64)
-        saty = (
-            detxs * self.alignm21 + detys * self.alignm22 + detzs * self.alignm23
-        ).astype(np.float64)
-        satz = (
-            detxs * self.alignm31 + detys * self.alignm32 + detzs * self.alignm33
-        ).astype(np.float64)
-
-        return satx, saty, satz
 
     def rawxy_to_detxy(
         self,
@@ -239,9 +189,9 @@ class CodedMask(CalDB):
     crunit2: str
     cdelt2: float
 
-    masksatx: float
-    masksaty: float
-    masksatz: float
+    maskdetx: float
+    maskdety: float
+    maskdetz: float
     maskoffx: float
     maskoffy: float
     maskoffz: float
@@ -253,9 +203,9 @@ class CodedMask(CalDB):
     maskcely: float
     maskcelz: float
 
-    detsatx: float
-    detsaty: float
-    detsatz: float
+    detdetx: float
+    detdety: float
+    detdetz: float
     detoffx: float
     detoffy: float
     detoffz: float
