@@ -987,10 +987,3 @@ class GenerateBadpix(GenerateCalDB):
             hdul.writeto(Path(outdir) / self.outname, checksum=True)
 
         return hdul
-
-
-if __name__ == "__main__":
-    teldef_generator = GenerateBadpix()
-    hdu = teldef_generator.generate_fits_file()[1]
-    for card in hdu.header.cards:
-        print(card)
