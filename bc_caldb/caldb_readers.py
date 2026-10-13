@@ -25,6 +25,22 @@ class CalDB(ABC):
     readers use.
     """
 
+    date: str
+    telescop: str
+    instrume: str
+    origin: str
+    creator: str
+    version: int
+    filename: str
+    content: str
+
+    ccls0001: str
+    ccnm0001: str
+    cdtp0001: str
+    cvsd0001: str
+    cvst0001: str
+    cdes0001: str
+
     @classmethod
     def from_caldb_file(cls, caldb_file: PathLike | str):
         """Generate a CalDB dataclass by reading in a CalDB fits file.
@@ -57,13 +73,6 @@ class Teldef(CalDB):
     """Reader for BlackCAT Teldef CalDB. Exposes the CalDB keywords to
     be used in python.
     """
-
-    ccls0001: str
-    ccnm0001: str
-    cdtp0001: str
-    cvsd0001: str
-    cvst0001: str
-    cdes0001: str
 
     ncoords: int
     coord0: str
@@ -172,13 +181,6 @@ class CodedMask(CalDB):
     be used in python.
     """
 
-    ccls0001: str
-    ccnm0001: str
-    cdtp0001: str
-    cvsd0001: str
-    cvst0001: str
-    cdes0001: str
-
     ctype1: str
     crpix1: float
     crval1: float
@@ -239,12 +241,22 @@ class Badpix(CalDB):
     be used in python.
     """
 
-    ccls0001: str
-    ccnm0001: str
-    cdtp0001: str
-    cvsd0001: str
-    cvst0001: str
-    cdes0001: str
+    hdudoc: str
+    hduclass: str
+    hduclas1: str
+    hduclas2: str
+
+    wmrebin: int
+    cdelt1: int
+    ddelt1: int
+    cdelt2: int
+    ddelt2: int
+    ctype1: str
+    ctype2: str
+    crval1: int
+    crpix1: int
+    crval2: int
+    crpix2: int
 
     breason: str
     goodval: int
